@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>장기 멀티 전략게임</title>
+  <style>
+    :root { --gap: 12px; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    h1 { margin: 0 0 8px 0; font-size: 22px; }
+    h2 { margin: 0 0 8px 0; font-size: 18px; }
+    input, button, select { font-size: 16px; padding: 10px 12px; }
+    .row { display:flex; align-items:center; gap: var(--gap); }
+    .col { display:flex; flex-direction:column; gap: var(--gap); }
+    .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; background:#fff; }
+    .muted { color:#666; font-size: 14px; }
+    .btn { cursor: pointer; }
+    .big { font-size: 18px; padding: 12px 16px; }
+    .ghost { background: transparent; border: 1px solid #e5e7eb; }
+    .success { background:#dcfce7; border:1px solid #bbf7d0; }
+    .danger { background:#fee2e2; border:1px solid #fecaca; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-top:1px solid #eee; padding: 8px; text-align: left; }
+    .right { text-align: right; }
+    .hidden { display:none; }
+    code { background:#f1f5f9; padding:2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header class="row" style="justify-content:space-between;">
+    <h1>장기 멀티 전략게임</h1>
+    <div class="muted" id="uidBadge">로그인 중…</div>
+  </header>
+
+  <!-- 0) 코드 입력 -->
+  <section id="gate" class="card col">
+    <div class="row">
+      <input id="accessCode" class="full" placeholder="접속 코드 입력 (운영자: 0374 / 플레이어: 프로필 코드)" />
+      <button id="enterBtn" class="btn big">입장</button>
+    </div>
+    <small class="muted">운영자 코드는 <b>0374</b>. 플레이어는 본인에게 할당된 <b>프로필 코드</b>로 접속합니다.</small>
+  </section>
+
+  <!-- 1) 운영자 화면 -->
+  <section id="admin" class="hidden">
+    <div class="card col">
+      <div class="row" style="justify-content: space-between;">
+        <h2>운영자 콘솔</h2>
+        <button class="btn ghost" id="backFromAdmin">나가기</button>
+      </div>
+
+      <!-- 턴 관리 -->
+      <div class="card col" style="background:#f8fafc;">
+        <div class="row" style="justify-content: space-between;">
+          <div>
+            <b>현재 턴:</b> <span id="turnLabel">0</span>
+            <span class="muted"> (턴 진행 시: 각 프로필 <b>국고 += 경제력/2</b>, <b>안정도 −1%</b>)</span>
+          </div>
+          <button id="advanceTurnBtn" class="btn success big">턴 넘기기</button>
+        </div>
+      </div>
+
+      <!-- 프로필 생성 -->
+      <div class="card col">
+        <h3 style="margin:0;">새 프로필 만들기</h3>
+        <div class="row">
+          <input id="newNationName" placeholder="국명 (예: 고려)" />
+          <input id="newNationCode" placeholder="프로필 코드 (예: KOR123)" />
+          <button id="createProfileBtn" class="btn big">생성</button>
+        </div>
+        <small class="muted">초기 값: 경제력 10000, 과학력 0.01, 문화력 0.01, 안정도 80%, 국고 0</small>
+      </div>
+
+      <!-- 프로필 목록/편집 -->
+      <div class="card col">
+        <h3 style="margin:0;">프로필 목록</h3>
+        <table id="profilesTable">
+          <thead>
+            <tr>
+              <th>코드</th><th>국명</th>
+              <th class="right">국고</th>
+              <th class="right">경제력</th>
+              <th class="right">과학력</th>
+              <th class="right">문화력</th>
+              <th class="right">안정도(%)</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="profilesBody"></tbody>
+        </table>
+
+        <div id="editorBox" class="card col hidden" style="background:#f8fafc;">
+          <h3 style="margin:0;">프로필 편집</h3>
+          <div class="row">
+            <input id="editCode" disabled />
+            <input id="editName" placeholder="국명" />
+            <input id="editTreasury" type="number" step="1" placeholder="국고" />
+            <input id="editEconomy" type="number" step="0.01" placeholder="경제력" />
+            <input id="editScience" type="number" step="0.01" placeholder="과학력" />
+            <input id="editCulture" type="number" step="0.01" placeholder="문화력" />
+            <input id="editStability" type="number" step="1" placeholder="안정도(%)" />
+            <button id="saveEditBtn" class="btn big success">저장</button>
+            <button id="cancelEditBtn" class="btn big ghost">취소</button>
+          </div>
+          <small class="muted">운영자는 수치를 언제든 임의로 변경할 수 있습니다.</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2) 플레이어 화면 -->
+  <section id="player" class="hidden">
+    <div class="card col">
+      <div class="row" style="justify-content: space-between;">
+        <h2 id="playerTitle">내 프로필</h2>
+        <button class="btn ghost" id="backFromPlayer">나가기</button>
+      </div>
+
+      <div class="card col">
+        <div class="row" style="flex-wrap:wrap; gap:16px;">
+          <div><b>코드:</b> <code id="p_code">-</code></div>
+          <div><b>국명:</b> <span id="p_name">-</span></div>
+          <div><b>현재 턴:</b> <span id="p_turn">-</span></div>
+        </div>
+        <table>
+          <tbody>
+            <tr><td>국고</td><td class="right"><span id="p_treasury">0</span></td></tr>
+            <tr><td>경제력</td><td class="right"><span id="p_economy">0</span></td></tr>
+            <tr><td>과학력</td><td class="right"><span id="p_science">0</span></td></tr>
+            <tr><td>문화력</td><td class="right"><span id="p_culture">0</span></td></tr>
+            <tr><td>안정도(%)</td><td class="right"><span id="p_stability">0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card col" style="background:#f8fafc;">
+        <h3 style="margin:0;">정책 등록</h3>
+        <div class="row">
+          <select id="policyType">
+            <option value="econ">경제투자 (예산의 1/4만큼 경제력 ↑)</option>
+            <option value="sci">과학력 투자 (2000당 0.01 ↑)</option>
+            <option value="cul">문화력 투자 (2000당 0.01 ↑)</option>
+            <option value="stab">안정도 투자 (4000당 1% ↑)</option>
+          </select>
+          <input id="policyBudget" type="number" step="1" placeholder="예산(국고에서 차감)" />
+          <button id="applyPolicyBtn" class="btn big">정책 등록</button>
+        </div>
+        <small class="muted">
+          정책 등록 시 즉시 효과가 적용되고, 입력한 예산만큼 <b>국고가 감소</b>합니다.
+        </small>
+        <div id="policyMsg" class="muted"></div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module">
+    /***** Firebase SDK *****/
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
+      serverTimestamp, collection, getDocs, writeBatch, increment
+    } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+    // === 여기에 본인 프로젝트 설정 붙여넣기 ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyCEvE_lccy97Ppjgrv-GumHiNXfUJ3SiZc",
+      authDomain: "qifa-23727.firebaseapp.com",
+      projectId: "qifa-23727",
+      storageBucket: "qifa-23727.firebasestorage.app",
+      messagingSenderId: "328358384863",
+      appId: "1:328358384863:web:bb6161a816a1ebd022c56a",
+      measurementId: "G-25PCKZSEHW"
+    };
+
+    // === 초기화 ===
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    // === DOM ===
+    const gate = document.getElementById('gate');
+    const admin = document.getElementById('admin');
+    const player = document.getElementById('player');
+    const uidBadge = document.getElementById('uidBadge');
+    const enterBtn = document.getElementById('enterBtn');
+    const accessCodeEl = document.getElementById('accessCode');
+
+    // Admin DOM
+    const turnLabel = document.getElementById('turnLabel');
+    const advanceTurnBtn = document.getElementById('advanceTurnBtn');
+    const profilesBody = document.getElementById('profilesBody');
+    const newNationName = document.getElementById('newNationName');
+    const newNationCode = document.getElementById('newNationCode');
+    const createProfileBtn = document.getElementById('createProfileBtn');
+    const editorBox = document.getElementById('editorBox');
+    const editCode = document.getElementById('editCode');
+    const editName = document.getElementById('editName');
+    const editTreasury = document.getElementById('editTreasury');
+    const editEconomy = document.getElementById('editEconomy');
+    const editScience = document.getElementById('editScience');
+    const editCulture = document.getElementById('editCulture');
+    const editStability = document.getElementById('editStability');
+    const saveEditBtn = document.getElementById('saveEditBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const backFromAdmin = document.getElementById('backFromAdmin');
+
+    // Player DOM
+    const p_code = document.getElementById('p_code');
+    const p_name = document.getElementById('p_name');
+    const p_turn = document.getElementById('p_turn');
+    const p_treasury = document.getElementById('p_treasury');
+    const p_economy  = document.getElementById('p_economy');
+    const p_science  = document.getElementById('p_science');
+    const p_culture  = document.getElementById('p_culture');
+    const p_stability = document.getElementById('p_stability');
+
+    const policyType = document.getElementById('policyType');
+    const policyBudget = document.getElementById('policyBudget');
+    const applyPolicyBtn = document.getElementById('applyPolicyBtn');
+    const policyMsg = document.getElementById('policyMsg');
+    const backFromPlayer = document.getElementById('backFromPlayer');
+
+    // === 상태 ===
+    let uid = null;
+    let isAdmin = false;
+    let currentCode = null; // 플레이어 프로필 코드
+    let unsubPlayer = null;
+    let unsubTurn = null;
+
+    // === 유틸 ===
+    const show = (el) => { gate.classList.add('hidden'); admin.classList.add('hidden'); player.classList.add('hidden'); el.classList.remove('hidden'); };
+    const fmt = (n, d=2) => (typeof n === 'number') ? n.toFixed(d) : n;
+    const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
+
+    // === 인증 ===
+    signInAnonymously(auth).catch(console.error);
+    onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      uid = user.uid;
+      uidBadge.textContent = `UID ${uid.slice(0,6)}…`;
+      show(gate);
+      accessCodeEl.focus();
+      // turn 구독 (플레이어/운영자 모두 공용)
+      const gameRef = doc(db, 'meta', 'game');
+      unsubTurn = onSnapshot(gameRef, (s) => {
+        const t = s.data()?.turn ?? 0;
+        turnLabel.textContent = t;
+        p_turn.textContent = t;
+      });
+    });
+
+    /*************** 게이트 (코드 입력) ***************/
+    enterBtn.onclick = async () => {
+      const code = accessCodeEl.value.trim();
+      if (!code) return;
+      if (code === '0374') {
+        isAdmin = true;
+        await ensureGameDoc();
+        await loadProfilesTable();
+        show(admin);
+      } else {
+        isAdmin = false;
+        currentCode = code;
+        await openPlayer(code);
+      }
+    };
+
+    /*************** 공용: meta/game 보장 ***************/
+    async function ensureGameDoc() {
+      const gameRef = doc(db, 'meta', 'game');
+      const snap = await getDoc(gameRef);
+      if (!snap.exists()) {
+        await setDoc(gameRef, { turn: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+    }
+
+    /*************** 운영자 기능 ***************/
+    // 프로필 생성
+    createProfileBtn.onclick = async () => {
+      const name = newNationName.value.trim();
+      const code = (newNationCode.value || '').trim();
+      if (!name || !code) return alert('국명과 프로필 코드를 입력하세요.');
+      const ref = doc(db, 'profiles', code);
+      const snap = await getDoc(ref);
+      if (snap.exists()) return alert('이미 존재하는 코드입니다.');
+      await setDoc(ref, {
+        code, name,
+        treasury: 0,
+        economy: 10000,
+        science: 0.01,
+        culture: 0.01,
+        stability: 80, // percent
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      newNationName.value = ""; newNationCode.value = "";
+      await loadProfilesTable();
+      alert(`프로필 생성 완료! 코드: ${code} (플레이어에게 이 코드를 알려주세요)`);
+    };
+
+    // 프로필 목록 로드
+    async function loadProfilesTable() {
+      profilesBody.innerHTML = "<tr><td colspan='8' class='muted'>로딩 중…</td></tr>";
+      const qs = await getDocs(collection(db, 'profiles'));
+      const rows = [];
+      qs.forEach(d => {
+        const v = d.data();
+        rows.push(`
+          <tr>
+            <td><code>${escapeHtml(v.code)}</code></td>
+            <td>${escapeHtml(v.name || '')}</td>
+            <td class="right">${fmt(v.treasury,0)}</td>
+            <td class="right">${fmt(v.economy,2)}</td>
+            <td class="right">${fmt(v.science,2)}</td>
+            <td class="right">${fmt(v.culture,2)}</td>
+            <td class="right">${fmt(v.stability,0)}</td>
+            <td><button class="btn ghost" data-edit="${v.code}">편집</button></td>
+          </tr>
+        `);
+      });
+      profilesBody.innerHTML = rows.join('') || "<tr><td colspan='8' class='muted'>아직 프로필이 없습니다.</td></tr>";
+
+      // 편집 버튼 연결
+      profilesBody.querySelectorAll('[data-edit]').forEach(btn => {
+        btn.onclick = async () => {
+          const code = btn.getAttribute('data-edit');
+          const v = (await getDoc(doc(db,'profiles',code))).data();
+          if (!v) return;
+          editorBox.classList.remove('hidden');
+          editCode.value = v.code;
+          editName.value = v.name || "";
+          editTreasury.value = v.treasury ?? 0;
+          editEconomy.value = v.economy ?? 0;
+          editScience.value = v.science ?? 0;
+          editCulture.value = v.culture ?? 0;
+          editStability.value = v.stability ?? 0;
+        };
+      });
+    }
+
+    cancelEditBtn.onclick = () => editorBox.classList.add('hidden');
+
+    saveEditBtn.onclick = async () => {
+      const code = editCode.value;
+      const ref = doc(db,'profiles',code);
+      const payload = {
+        name: editName.value.trim(),
+        treasury: Number(editTreasury.value || 0),
+        economy: Number(editEconomy.value || 0),
+        science: Number(editScience.value || 0),
+        culture: Number(editCulture.value || 0),
+        stability: clamp(Number(editStability.value || 0), 0, 100),
+        updatedAt: serverTimestamp()
+      };
+      await updateDoc(ref, payload);
+      editorBox.classList.add('hidden');
+      await loadProfilesTable();
+    };
+
+    // 턴 넘기기
+    advanceTurnBtn.onclick = async () => {
+      if (!confirm('모든 프로필에 턴 진행 효과를 적용합니다. 진행할까요?')) return;
+      // meta.turn +1, 그리고 각 프로필에: 국고 += 경제력/2, 안정도 -= 1 (0~100 클램프)
+      const gameRef = doc(db,'meta','game');
+      const qs = await getDocs(collection(db,'profiles'));
+      const batch = writeBatch(db);
+
+      // turn + 1
+      batch.update(gameRef, { turn: increment(1), updatedAt: serverTimestamp() });
+
+      qs.forEach(docSnap => {
+        const v = docSnap.data();
+        const code = docSnap.id;
+        const nextTreasury = (v.treasury ?? 0) + (v.economy ?? 0)/2;
+        const nextStability = clamp((v.stability ?? 0) - 1, 0, 100);
+        batch.update(doc(db,'profiles',code), {
+          treasury: Math.round(nextTreasury), // 국고는 정수로 관리
+          stability: nextStability,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      await batch.commit();
+      alert('턴을 진행했습니다.');
+      await loadProfilesTable();
+    };
+
+    backFromAdmin.onclick = () => { show(gate); };
+
+    /*************** 플레이어 기능 ***************/
+    async function openPlayer(code) {
+      // 존재 확인 + 구독
+      const ref = doc(db, 'profiles', code);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) { alert('프로필 코드가 올바르지 않습니다. 운영자에게 문의하세요.'); return; }
+      if (unsubPlayer) { unsubPlayer(); unsubPlayer = null; }
+      unsubPlayer = onSnapshot(ref, (s) => {
+        const v = s.data();
+        p_code.textContent = v.code;
+        p_name.textContent = v.name || '-';
+        p_treasury.textContent = fmt(v.treasury,0);
+        p_economy.textContent  = fmt(v.economy,2);
+        p_science.textContent  = fmt(v.science,2);
+        p_culture.textContent  = fmt(v.culture,2);
+        p_stability.textContent= fmt(v.stability,0);
+      });
+      show(player);
+    }
+
+    // 정책 등록 (즉시 적용)
+    applyPolicyBtn.onclick = async () => {
+      const budget = Math.max(0, Math.floor(Number(policyBudget.value || 0)));
+      if (!budget) { policyMsg.textContent = '예산을 입력하세요.'; return; }
+      const ref = doc(db,'profiles', currentCode);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const v = snap.data();
+      if ((v.treasury ?? 0) < budget) { policyMsg.textContent = '국고가 부족합니다.'; return; }
+
+      let delta = { treasury: (v.treasury - budget) };
+      let note = '';
+
+      if (policyType.value === 'econ') {
+        const inc = budget / 4;
+        delta.economy = (v.economy ?? 0) + inc;
+        note = `경제력이 ${inc.toFixed(2)} 상승했습니다.`;
+      } else if (policyType.value === 'sci') {
+        const step = Math.floor(budget / 2000) * 0.01;
+        if (step <= 0) { policyMsg.textContent = '예산이 너무 적습니다. (2000 단위)'; return; }
+        delta.science = (v.science ?? 0) + step;
+        note = `과학력이 ${step.toFixed(2)} 상승했습니다.`;
+      } else if (policyType.value === 'cul') {
+        const step = Math.floor(budget / 2000) * 0.01;
+        if (step <= 0) { policyMsg.textContent = '예산이 너무 적습니다. (2000 단위)'; return; }
+        delta.culture = (v.culture ?? 0) + step;
+        note = `문화력이 ${step.toFixed(2)} 상승했습니다.`;
+      } else if (policyType.value === 'stab') {
+        const step = Math.floor(budget / 4000); // %
+        if (step <= 0) { policyMsg.textContent = '예산이 너무 적습니다. (4000 단위)'; return; }
+        delta.stability = clamp((v.stability ?? 0) + step, 0, 100);
+        note = `안정도가 ${step}% 상승했습니다.`;
+      }
+
+      delta.updatedAt = serverTimestamp();
+      await updateDoc(ref, delta);
+      policyMsg.textContent = `정책 적용 완료. ${note} (지출: ${budget})`;
+      policyBudget.value = '';
+    };
+
+    backFromPlayer.onclick = () => { if (unsubPlayer) unsubPlayer(); show(gate); };
+
+    // 간단 escape
+    function escapeHtml(s){ const d=document.createElement('div'); d.innerText = s ?? ''; return d.innerHTML; }
+  </script>
+</body>
+</html>
