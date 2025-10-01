@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zero Race - 실시간 멀티 게임</title>
+  <style>
+    :root { --gap: 12px; }
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; gap:8px; justify-content: space-between; }
+    h1 { font-size: 20px; margin: 0; }
+    input, button { font-size: 16px; padding: 10px 12px; }
+    .row { display:flex; gap: var(--gap); align-items: center; }
+    .col { display:flex; flex-direction: column; gap: var(--gap); }
+    #join, #lobby, #game, #result { display:none; }
+    #current { font-size: 80px; text-align: center; margin: 16px 0; letter-spacing: 2px; }
+    #info { color:#555; }
+    .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+    .muted { color:#666; font-size: 14px; }
+    .btn { cursor:pointer; }
+    .big { font-size: 20px; padding: 14px 16px; }
+    .full { width: 100%; }
+    .danger { background:#fee2e2; border:1px solid #fecaca; }
+    .success { background:#dcfce7; border:1px solid #bbf7d0; }
+    .ghost { background: transparent; border: 1px solid #e5e7eb; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Zero Race</h1>
+    <span id="uidBadge" class="muted">로그인 중…</span>
+  </header>
+
+  <!-- 1) 참가/입장 -->
+  <section id="join" class="card col">
+    <div class="row">
+      <input id="roomCode" class="full" placeholder="방 코드 (예: class1)" />
+    </div>
+    <div class="row">
+      <input id="nickname" class="full" placeholder="닉네임 (예: 철수)" />
+    </div>
+    <button id="joinBtn" class="btn big full">입장하기</button>
+    <p class="muted">같은 방 코드로 접속한 친구들과 함께 진행됩니다.</p>
+  </section>
+
+  <!-- 2) 로비(라운드 대기/시작) -->
+  <section id="lobby" class="card col">
+    <div class="row" style="justify-content: space-between;">
+      <div>
+        <div id="roomLabel"><b>방:</b> -</div>
+        <div id="stateLabel" class="muted">상태: -</div>
+      </div>
+      <button id="leaveBtn" class="btn ghost">방 나가기</button>
+    </div>
+
+    <div id="playersBox" class="muted"></div>
+
+    <div id="startBox" class="col">
+      <button id="startBtn" class="btn big success">새 라운드 시작 (랜덤 숫자 공개)</button>
+      <small class="muted">누구나 빈 라운드일 때 시작할 수 있어요.</small>
+    </div>
+  </section>
+
+  <!-- 3) 게임 진행 -->
+  <section id="game" class="card col">
+    <div id="current">--</div>
+    <div class="row" style="justify-content:center; gap: 16px;">
+      <button id="decBtn" class="btn big full">-1</button>
+    </div>
+    <div id="info" class="muted" style="text-align:center;">빠르게 눌러 0을 만들면 승리!</div>
+  </section>
+
+  <!-- 4) 결과 -->
+  <section id="result" class="card col">
+    <div id="resultText" style="font-size:20px;"></div>
+    <div class="row" style="justify-content:center; gap: 16px;">
+      <button id="playAgainBtn" class="btn big">다시하기</button>
+    </div>
+  </section>
+
+  <script type="module">
+    // ===== Firebase SDK 로드 =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, onSnapshot,
+      serverTimestamp, collection, setDoc as setSubDoc
+    } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+    // ---- 여기에 본인 프로젝트 설정 붙여넣기 ----
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      appId: "YOUR_APP_ID",
+    };
+
+    // ===== 초기화 =====
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    // ===== DOM =====
+    const uidBadge = document.getElementById('uidBadge');
+    const join = document.getElementById('join');
+    const lobby = document.getElementById('lobby');
+    const game = document.getElementById('game');
+    const result = document.getElementById('result');
+
+    const roomCodeEl = document.getElementById('roomCode');
+    const nicknameEl = document.getElementById('nickname');
+    const joinBtn = document.getElementById('joinBtn');
+    const leaveBtn = document.getElementById('leaveBtn');
+
+    const roomLabel = document.getElementById('roomLabel');
+    const stateLabel = document.getElementById('stateLabel');
+    const playersBox = document.getElementById('playersBox');
+
+    const startBtn = document.getElementById('startBtn');
+    const startBox = document.getElementById('startBox');
+
+    const currentEl = document.getElementById('current');
+    const decBtn = document.getElementById('decBtn');
+
+    const resultText = document.getElementById('resultText');
+    const playAgainBtn = document.getElementById('playAgainBtn');
+
+    // ===== 전역 상태 =====
+    let uid = null;
+    let me = { name: "" };
+    let roomCode = "";
+    let unsubRoom = null;
+    let unsubPlayers = null;
+    let clicking = false; // 더블클릭 방지
+
+    // ===== 유틸 =====
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    function show(sectionId) {
+      [join, lobby, game, result].forEach(s => s.style.display = 'none');
+      sectionId.style.display = 'block';
+    }
+
+    function safeText(s) {
+      const d = document.createElement('div');
+      d.innerText = s;
+      return d.innerHTML;
+    }
+
+    // ===== 인증(익명) =====
+    signInAnonymously(auth).catch(console.error);
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        uid = user.uid;
+        uidBadge.textContent = `UID ${uid.slice(0,6)}…`;
+        // 로컬 저장 닉네임/방 불러오기
+        nicknameEl.value = localStorage.getItem('zr_name') || "";
+        roomCodeEl.value = localStorage.getItem('zr_room') || "";
+        show(join);
+      }
+    });
+
+    // ===== 방 입장 =====
+    joinBtn.onclick = async () => {
+      const code = roomCodeEl.value.trim().toLowerCase();
+      const name = nicknameEl.value.trim() || `guest-${uid.slice(0,4)}`;
+      if (!code) return alert('방 코드를 입력하세요.');
+      roomCode = code; me.name = name;
+
+      localStorage.setItem('zr_room', roomCode);
+      localStorage.setItem('zr_name', me.name);
+
+      const roomRef = doc(db, 'rooms', roomCode);
+      const snap = await getDoc(roomRef);
+      if (!snap.exists()) {
+        await setDoc(roomRef, {
+          state: 'idle',
+          initial: 0,
+          current: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // 플레이어 등록
+      const playerRef = doc(db, 'rooms', roomCode, 'players', uid);
+      await setSubDoc(playerRef, {
+        name: me.name,
+        joinedAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp()
+      }, { merge: true });
+
+      roomLabel.innerHTML = `<b>방:</b> ${safeText(roomCode)} / <b>나:</b> ${safeText(me.name)}`;
+      subscribeRoom(roomCode);
+      subscribePlayers(roomCode);
+      show(lobby);
+    };
+
+    // ===== 방 나가기 =====
+    leaveBtn.onclick = async () => {
+      await cleanupSubscriptions();
+      roomCode = "";
+      show(join);
+    };
+
+    async function cleanupSubscriptions() {
+      if (unsubRoom) { unsubRoom(); unsubRoom = null; }
+      if (unsubPlayers) { unsubPlayers(); unsubPlayers = null; }
+    }
+
+    // ===== 실시간 구독: 방 상태 =====
+    function subscribeRoom(code) {
+      const roomRef = doc(db, 'rooms', code);
+      unsubRoom = onSnapshot(roomRef, (docSnap) => {
+        const data = docSnap.data();
+        if (!data) return;
+        stateLabel.textContent = `상태: ${data.state}`;
+        if (data.state === 'idle') {
+          startBox.style.display = 'block';
+          show(lobby);
+        } else if (data.state === 'running') {
+          startBox.style.display = 'none';
+          currentEl.textContent = data.current;
+          show(game);
+        } else if (data.state === 'finished') {
+          startBox.style.display = 'block';
+          const who = data.winnerName ? `${data.winnerName} 님 승리!` : '승자 결정';
+          resultText.textContent = `${who} (시작값: ${data.initial})`;
+          show(result);
+        }
+      });
+    }
+
+    // ===== 실시간 구독: 플레이어 목록(간단 표기) =====
+    function subscribePlayers(code) {
+      // 간단: 스냅샷 대신 1회 읽기/표시로도 충분하지만, 여기선 안내 차원에서 표시.
+      const playersRef = collection(db, 'rooms', code, 'players');
+      playersBox.textContent = `참여자 로딩 중…`;
+      // onSnapshot을 players에 쓰려면 import에서 onSnapshot, collection을 이미 불러옴
+      unsubPlayers = onSnapshot(playersRef, (qs) => {
+        const names = [];
+        qs.forEach(d => names.push(d.data().name || '익명'));
+        playersBox.textContent = `참여자: ${names.join(', ') || '없음'}`;
+      });
+    }
+
+    // ===== 라운드 시작 =====
+    startBtn.onclick = async () => {
+      if (!roomCode) return;
+      const n = randInt(15, 40); // 시작 랜덤 숫자 (범위는 자유 조정)
+      const roomRef = doc(db, 'rooms', roomCode);
+      try {
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(roomRef);
+          const data = snap.data();
+          if (!data) throw new Error('방 없음');
+          if (data.state === 'running') throw new Error('이미 진행 중');
+          tx.update(roomRef, {
+            state: 'running',
+            initial: n,
+            current: n,
+            winnerUid: null,
+            winnerName: null,
+            startedAt: serverTimestamp(),
+            endedAt: null,
+            updatedAt: serverTimestamp()
+          });
+        });
+      } catch (e) {
+        alert(e.message || e);
+      }
+    };
+
+    // ===== -1 버튼(경쟁 구간! 트랜잭션으로 원자적 처리) =====
+    decBtn.onclick = async () => {
+      if (clicking) return; // 연타 방지
+      clicking = true; decBtn.disabled = true;
+      await zeroSafeDecrement();
+      await sleep(120); // 살짝 쿨다운(중복 입력 방지)
+      clicking = false; decBtn.disabled = false;
+    };
+
+    async function zeroSafeDecrement() {
+      const roomRef = doc(db, 'rooms', roomCode);
+      try {
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(roomRef);
+          const data = snap.data();
+          if (!data || data.state !== 'running') throw new Error('라운드 진행 중 아님');
+          const next = (data.current ?? 0) - 1;
+          if (next > 0) {
+            // 일반 감소
+            tx.update(roomRef, {
+              current: next,
+              updatedAt: serverTimestamp()
+            });
+          } else if (next === 0) {
+            // 승리 처리(단 한 번만 가능)
+            tx.update(roomRef, {
+              current: 0,
+              state: 'finished',
+              winnerUid: uid,
+              winnerName: me.name,
+              endedAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          } else {
+            // 이미 0 이하
+            throw new Error('이미 종료됨');
+          }
+        });
+      } catch (e) {
+        // 경쟁 중 실패는 정상 (다른 사람이 먼저 눌렀을 수 있음)
+        console.warn(e);
+      }
+    }
+
+    // ===== 다시하기 =====
+    playAgainBtn.onclick = () => {
+      show(lobby); // 로비로 돌아가 "새 라운드 시작" 버튼을 누르게 유도
+    };
+  </script>
+</body>
+</html>
