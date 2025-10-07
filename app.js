@@ -133,23 +133,36 @@ let ADMIN_CODE = null;
 
 // ---- 클릭 핸들러(딱 1개만!) ----
 enterBtn.onclick = async () => {
+  alert("✅ 클릭 이벤트 실행됨"); // 첫 확인
+
   const input = (accessCode.value || "").trim();
-
   if (!input) {
-    alert("코드를 입력하세요.");
+    alert("⚠️ 코드가 비어있음");
     return;
   }
 
-  // 디버그: 비교값 보여주기 (문제 있으면 여기가 힌트)
-  // alert(`입력:${input}\n관리자코드:${ADMIN_CODE}`);
+  alert("입력한 코드: " + input);
 
-  if (ADMIN_CODE && input === ADMIN_CODE) {
-    await loadAdminConsole();
-    show("admin");
-    return;
+  try {
+    // 관리자 코드 비교
+    if (ADMIN_CODE) {
+      alert("관리자 코드: " + ADMIN_CODE);
+    } else {
+      alert("ADMIN_CODE가 아직 로드되지 않음");
+    }
+
+    if (ADMIN_CODE && input === ADMIN_CODE) {
+      alert("관리자 일치 → 콘솔로 이동");
+      await loadAdminConsole();
+      show("admin");
+      return;
+    }
+
+    alert("플레이어 코드로 이동 시도");
+    await openPlayer(input);
+  } catch (err) {
+    alert("❌ 오류 발생: " + err.message);
   }
-
-  await openPlayer(input);
 };
 
 /************** 전역 상태 **************/
