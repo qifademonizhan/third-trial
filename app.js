@@ -1,4 +1,5 @@
 /************** Firebase 초기화 **************/
+/************** Firebase 초기화 **************/
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection,
@@ -8,14 +9,28 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
+// ✅ qifa-23727 Firebase 설정
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  projectId: "YOUR_PROJECT_ID",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  apiKey: "AIzaSyCEvE_lccy97Ppjgrv-GumHiNXfUJ3SiZc",
+  authDomain: "qifa-23727.firebaseapp.com",
+  projectId: "qifa-23727",
+  storageBucket: "qifa-23727.firebasestorage.app",
+  messagingSenderId: "328358384863",
+  appId: "1:328358384863:web:bb6161a816a1ebd022c56a",
+  measurementId: "G-25PCKZSEHW"
 };
+
+// ✅ Firebase 초기화
 const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const db = getFirestore(app);
 const auth = getAuth(app);
+
+// ✅ 익명 로그인 (Firestore 접근 허용용)
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    await signInAnonymously(auth);
+  }
+});
 
 /************** 전역 상태 **************/
 let session = null;     // { role: 'admin'|'player', playerCode? }
