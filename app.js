@@ -73,9 +73,90 @@ window.onload = () => {
   $("#btnNextTurn")?.addEventListener("click", nextTurn);
   $("#btnCreateProfile")?.addEventListener("click", createProfile);
 
-  enterBtn.onclick = async () => {
-    const code = (accessInput.value||"").trim();
-    if (!code) return;
+  // ===== 공용: 관리자 코드 캐시 =====
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+// 위 import는 파일 상단에 이미 있다면 중복 추가하지 마세요.
+
+let ADMIN_CODE_CACHE = null;
+async function getAdminCode(db) {
+  if (ADMIN_CODE_CACHE) return ADMIN_CODE_CACHE;
+  const s = await getDoc(doc(db, "access", "admin"));
+  ADMIN_CODE_CACHE = s.exists() ? String(s.data().code ?? "") : null;
+  return ADMIN_CODE_CACHE;
+}
+
+// ===== 게이트 초기화: DOM 준비되면 요소 연결 + 보조 바인딩 =====
+function initGate(db) {
+  const enterBtn    = document.getElementById("enterBtn");
+  const accessInput = document.getElementById("accessCode");
+  const gateEl   = document.getElementById("gate");
+  const adminEl  = document.getElementById("admin");
+  const playerEl = document.getElementById("player");
+
+  if (!enterBtn || !accessInput) {
+    alert("❌ 로그인 UI를 찾지 못했습니다 (id 확인 필요)");
+    return;
+  }
+
+  function show(section){
+    gateEl.classList.add("hidden");
+    adminEl.classList.toggle("hidden", section!=="admin");
+    playerEl.classList.toggle("hidden", section!=="player");
+  }
+
+  async function loadAdminConsole() {
+    const ref = doc(db, "game", "config");
+    const s = await getDoc(ref);
+    if (!s.exists()) await setDoc(ref, { currentTurn: 1, lastUpdated: serverTimestamp() });
+    show("admin");
+  }
+
+  async function openPlayer(code) {
+    const pRef = doc(db, "profiles", code);
+    const pSnap = await getDoc(pRef);
+    if (!pSnap.exists()) { alert("해당 프로필이 없습니다."); gateEl.classList.remove("hidden"); return; }
+    const p = pSnap.data();
+    document.getElementById("pHeader").textContent = `${p.name} (${p.code})`;
+    document.getElementById("pStats").innerHTML = `
+      <div>경제력 <b>${p.economy}</b></div>
+      <div>국고 <b>${p.treasury}</b></div>
+      <div>과학력 <b>${p.science}</b></div>
+      <div>문화력 <b>${p.culture}</b></div>
+      <div>행정력 <b>${p.admin}</b></div>
+    `;
+    show("player");
+  }
+
+  // ✅ 전역(윈도우)에 노출: HTML에서 직접 호출
+  window._onEnter = async () => {
+    const input = (accessInput.value || "").trim();
+    if (!input) { alert("코드를 입력하세요."); return; }
+
+    try {
+      const adminCode = await getAdminCode(db);
+      if (adminCode && input === adminCode) {
+        await loadAdminConsole();
+        return;
+      }
+      await openPlayer(input);
+    } catch (e) {
+      alert("오류: " + (e?.message || e));
+    }
+  };
+
+  // 보조 바인딩 (엔터키 지원)
+  accessInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") window._onEnter();
+  });
+}
+
+// DOM 준비되면 반드시 초기화
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => initGate(db));
+} else {
+  initGate(db);
+}
 
     // 관리자 코드 확인
     const aSnap = await getDoc(doc(db,"access","admin"));
