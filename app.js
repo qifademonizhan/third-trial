@@ -1,3 +1,4 @@
+alert("✅ app.js가 실행되었습니다!");
 /************** Firebase 초기화 **************/
 /************** Firebase 초기화 **************/
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
@@ -629,7 +630,3 @@ function canEdit(code) {
 function safeJSON(s) {
   try { return s ? JSON.parse(s) : null; } catch { return null; }
 }
-
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-const t = await getDoc(doc(db, "access", "admin"));
-console.log("Admin doc:", t.exists() ? t.data() : "❌ 없음");
