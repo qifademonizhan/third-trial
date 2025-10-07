@@ -83,23 +83,73 @@ async function openPlayer(code) {
 }
 
 // 입장 버튼 클릭 처리
+// ---- 게이트 요소 참조 ----
+const enterBtn = document.getElementById("enterBtn");
+const accessCodeEl = document.getElementById("accessCode");
+const gateEl = document.getElementById("gate");
+const adminEl = document.getElementById("admin");
+const playerEl = document.getElementById("player");
+
+function show(section) {
+  gateEl.classList.add("hidden");
+  adminEl.classList.toggle("hidden", section !== "admin");
+  playerEl.classList.toggle("hidden", section !== "player");
+}
+
+// 관리자 콘솔 기본 로드
+async function loadAdminConsole() {
+  const ref = doc(db, "game", "config");
+  const snap = await getDoc(ref);
+  if (!snap.exists()) await setDoc(ref, { currentTurn: 1 });
+}
+
+// 플레이어 화면 로드
+async function openPlayer(code) {
+  const pRef = doc(db, "profiles", code);
+  const pSnap = await getDoc(pRef);
+  if (!pSnap.exists()) {
+    alert("해당 프로필이 없습니다.");
+    gateEl.classList.remove("hidden");
+    return;
+  }
+  const p = pSnap.data();
+  document.getElementById("pHeader").textContent = `${p.name} (${p.code})`;
+  document.getElementById("pStats").innerHTML = `
+    <div>경제력 <b>${p.economy}</b></div>
+    <div>국고 <b>${p.treasury}</b></div>
+    <div>과학력 <b>${p.science}</b></div>
+    <div>문화력 <b>${p.culture}</b></div>
+    <div>행정력 <b>${p.admin}</b></div>
+  `;
+  show("player");
+}
+
+// ---- 관리자코드를 미리 읽어 캐시 ----
+let ADMIN_CODE = null;
+(async () => {
+  const aSnap = await getDoc(doc(db, "access", "admin"));
+  ADMIN_CODE = aSnap.exists() ? String(aSnap.data().code ?? "") : null;
+})();
+
+// ---- 클릭 핸들러(딱 1개만!) ----
 enterBtn.onclick = async () => {
-  const code = (accessCodeEl.value || "").trim();
-  if (!code) return;
+  const input = (accessCodeEl.value || "").trim();
 
-  // 1) 관리자 코드 체크
-  const aRef = doc(db, "access", "admin");
-  const aSnap = await getDoc(aRef);
-  const adminCode = aSnap.exists() ? aSnap.data().code : null;
+  if (!input) {
+    alert("코드를 입력하세요.");
+    return;
+  }
 
-  if (adminCode && code === String(adminCode)) {
+  // 디버그: 비교값 보여주기 (문제 있으면 여기가 힌트)
+  // alert(`입력:${input}\n관리자코드:${ADMIN_CODE}`);
+
+  if (ADMIN_CODE && input === ADMIN_CODE) {
     await loadAdminConsole();
     show("admin");
     return;
   }
 
-  // 2) 일반 프로필 접속
-  await openPlayer(code);
+  await openPlayer(input);
 };
 
 /************** 전역 상태 **************/
