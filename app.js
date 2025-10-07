@@ -1,4 +1,3 @@
-alert("✅ app.js가 실행되었습니다!");
 /************** Firebase 초기화 **************/
 /************** Firebase 초기화 **************/
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
