@@ -133,7 +133,7 @@ let ADMIN_CODE = null;
 
 // ---- 클릭 핸들러(딱 1개만!) ----
 enterBtn.onclick = async () => {
-  const input = (accessCodeEl.value || "").trim();
+  const input = (accessCode.value || "").trim();
 
   if (!input) {
     alert("코드를 입력하세요.");
