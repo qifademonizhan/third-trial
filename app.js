@@ -32,6 +32,76 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+// ✅ Firebase 초기화 (기존 코드)
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ✅ ↓↓↓ 여기부터 새 코드 붙이기 ↓↓↓
+
+// HTML 요소
+const enterBtn = document.getElementById("enterBtn");
+const accessCodeEl = document.getElementById("accessCode");
+const gateEl = document.getElementById("gate");
+const adminEl = document.getElementById("admin");
+const playerEl = document.getElementById("player");
+
+// 화면 전환 함수
+function show(section) {
+  gateEl.classList.add("hidden");
+  adminEl.classList.toggle("hidden", section !== "admin");
+  playerEl.classList.toggle("hidden", section !== "player");
+}
+
+// 관리자 콘솔 불러오기
+async function loadAdminConsole() {
+  const ref = doc(db, "game", "config");
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    await setDoc(ref, { currentTurn: 1 });
+  }
+}
+
+// 플레이어 프로필 불러오기
+async function openPlayer(code) {
+  const pRef = doc(db, "profiles", code);
+  const pSnap = await getDoc(pRef);
+  if (!pSnap.exists()) {
+    alert("해당 프로필이 없습니다.");
+    gateEl.classList.remove("hidden");
+    return;
+  }
+  const p = pSnap.data();
+  document.getElementById("pHeader").textContent = `${p.name} (${p.code})`;
+  document.getElementById("pStats").innerHTML = `
+    <div>경제력 <b>${p.economy}</b></div>
+    <div>국고 <b>${p.treasury}</b></div>
+    <div>과학력 <b>${p.science}</b></div>
+    <div>문화력 <b>${p.culture}</b></div>
+    <div>행정력 <b>${p.admin}</b></div>
+  `;
+  show("player");
+}
+
+// 입장 버튼 클릭 처리
+enterBtn.onclick = async () => {
+  const code = (accessCodeEl.value || "").trim();
+  if (!code) return;
+
+  // 1) 관리자 코드 체크
+  const aRef = doc(db, "access", "admin");
+  const aSnap = await getDoc(aRef);
+  const adminCode = aSnap.exists() ? aSnap.data().code : null;
+
+  if (adminCode && code === String(adminCode)) {
+    await loadAdminConsole();
+    show("admin");
+    return;
+  }
+
+  // 2) 일반 프로필 접속
+  await openPlayer(code);
+};
+
 /************** 전역 상태 **************/
 let session = null;     // { role: 'admin'|'player', playerCode? }
 let currentProfile = null; // 플레이어가 보고있는 프로필 데이터 캐시
