@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>멀티 대전략 게임</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- 시작화면 -->
+  <!-- 1. 시작화면 -->
   <section id="gate">
     <h1>접속 코드 입력</h1>
     <input id="accessCode" placeholder="관리자코드 또는 프로필 코드" />
@@ -15,12 +15,13 @@
     <p class="hint">관리자: 관리자코드 / 플레이어: 본인 프로필의 고유코드</p>
   </section>
 
-  <!-- 관리자 콘솔 -->
+  <!-- 2. 관리자 콘솔 -->
   <section id="admin" class="hidden">
     <h2>관리자 콘솔</h2>
+
     <div class="toolbar">
-      <button id="btnNextTurn">턴 넘기기</button>
       <span id="turnLabel">턴: -</span>
+      <button id="btnNextTurn">턴 넘기기</button>
     </div>
 
     <h3>프로필 생성</h3>
@@ -34,7 +35,7 @@
     <div id="profilesList"></div>
   </section>
 
-  <!-- 플레이어 화면 -->
+  <!-- 3. 플레이어 기본 프로필 화면 -->
   <section id="player" class="hidden">
     <h2 id="pHeader">-</h2>
     <div id="pStats" class="stats"></div>
@@ -56,6 +57,7 @@
     </div>
   </section>
 
+  <!-- 스크립트는 반드시 body 맨 아래 -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
